@@ -21,12 +21,22 @@ set(CMAKE_C_FLAGS "-std=c11 -Wall -Wextra")
 
 # Wskazujemy pliki źródłowe.
 set(SOURCE_FILES
-    src/map.c
-    src/map.h
-    src/map_main.c)
+        src/CityRoad.c
+        src/map.h
+        src/HashMap.c
+        src/Heap.h
+        src/CityRoad.h
+        src/Heap.c
+        src/map.c
+        src/HashMap.h
+        src/map_main.c)
+
+set(TEST1 src/test.c src/HashMap.c)
+
 
 # Wskazujemy plik wykonywalny.
 add_executable(map ${SOURCE_FILES})
+add_executable(test1 ${TEST1})
 
 # Dodajemy obsługę Doxygena: sprawdzamy, czy jest zainstalowany i jeśli tak to:
 find_package(Doxygen)
@@ -36,8 +46,7 @@ if (DOXYGEN_FOUND)
     # Dodajemy cel doc: użycie make doc spowoduje wywołanie doxygena z odpowiednim plikiem konfiguracyjnym w folderze kompilacji.
     # Na wyjście zostanie wypisany odpowiedni komentarz.
     add_custom_target(doc
-        ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMENT "Generating API documentation with Doxygen"
-    )
+            ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            COMMENT "Generating API documentation with Doxygen")
 endif (DOXYGEN_FOUND)

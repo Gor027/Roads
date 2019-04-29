@@ -17,7 +17,10 @@ struct HashMap {
 
 static hm_item *create_item(void *key, void *value) {
     hm_item *item = (hm_item *) malloc(sizeof(hm_item));
-    item->key = key;
+    char *key_str = key;
+    char *keycopy = malloc(strlen(key_str) + 1);
+    strcpy(keycopy, key_str);
+    item->key = keycopy;
     item->value = value;
 
     return item;
@@ -59,6 +62,30 @@ void *search_hmap(hmap *hm, char *key) {
     return NULL;
 }
 
+void rehash(hmap *hm) {
+    hm_item *next;
+
+    hm_item **current = hm->buckets;
+    uint64_t s = hm->size;
+    uint64_t size = s * 2;
+
+    hm_item **buckets = calloc(size, sizeof(hm_item *));
+
+    for (uint64_t i = 0; i < s; i++) {
+        for (hm_item *item = current[i]; item != NULL; item = next) {
+            uint64_t index = hash(item->key, size);
+            next = item->next;
+            item->next = buckets[index];
+            buckets[index] = item;
+        }
+    }
+
+    free(hm->buckets);
+    hm->buckets = buckets;
+    hm->size = size;
+}
+
+
 void set_hmap(hmap *hm, void *key, void *value) {
     hm_item *item;
     uint64_t index = hash(key, hm->size);
@@ -77,8 +104,11 @@ void set_hmap(hmap *hm, void *key, void *value) {
     item = *p;
     (*p) = create_item(key, value);
     (*p)->next = item;
-}
 
+    // Rehash when current size is at least 75% of the total size
+    if (++hm->count >= hm->size * 3 / 4)
+        rehash(hm);
+}
 
 /* This function may be useful for future development */
 //void delete_hmap(hmap *hm, void *key) {
@@ -113,6 +143,7 @@ void free_hmap(hmap *hm) {
     for (uint64_t i = 0; i < hm->size; i++) {
         for (hm_item *item = hm->buckets[i]; item != NULL;) {
             hm_item *next = item->next;
+            free(item->key);
             free(item);
             item = next;
         }

@@ -31,12 +31,9 @@ set(SOURCE_FILES
         src/HashMap.h
         src/map_main.c)
 
-set(TEST1 src/test.c src/HashMap.c)
-
 
 # Wskazujemy plik wykonywalny.
 add_executable(map ${SOURCE_FILES})
-add_executable(test1 ${TEST1})
 
 # Dodajemy obsługę Doxygena: sprawdzamy, czy jest zainstalowany i jeśli tak to:
 find_package(Doxygen)

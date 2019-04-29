@@ -116,7 +116,7 @@ static inline bool checkCityName(const char *name) {
 
 bool addRoad(Map *map, const char *city1, const char *city2, unsigned length, int builtYear) {
     // If the city names are the same or the builtYear is wrong
-    if (!checkCityName(city1) || !checkCityName(city2) || strcmp(city1, city2) == 0 || builtYear == 0) {
+    if (!checkCityName(city1) || !checkCityName(city2) || strcmp(city1, city2) == 0 || builtYear == 0 || length <= 0) {
         return false;
     }
 
@@ -473,14 +473,11 @@ bool removeRoad(Map *map, const char *city1, const char *city2) {
     if (!checkCityName(city1) || !checkCityName(city2))
         return false;
 
-    printf("BVPU\n");
     City *firstCity = search_hmap(map->nameToCity, (void *) city1);
-    printf("BVPUCT\n");
     City *secondCity = search_hmap(map->nameToCity, (void *) city2);
     Road *road1 = areConnected(firstCity, secondCity);
-    Road *road2 = areConnected(secondCity, firstCity);
 
-    if (!firstCity || !secondCity || !road1 || !road2 || strcmp(city1, city2) == 0)
+    if (!firstCity || !secondCity || !road1 || strcmp(city1, city2) == 0)
         return false;
 
     for (int i = 1; i < ROUTES_SIZE; ++i) {

@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 #include "CityRoad.h"
 
 List *List_create(void) {
@@ -33,7 +34,13 @@ City *City_create(const char *cityName, uint64_t id) {
     if (city == NULL)
         return NULL; /* In case when allocation failed */
 
-    city->cityName = cityName;
+    char *str_new = (char *) malloc(sizeof(char) * (strlen(cityName)+1));
+
+    if (str_new == NULL)
+        return NULL;
+
+    strcpy(str_new, cityName);
+    city->cityName = str_new;
     city->visited = false;
     city->id = id;
     city->roadsList = List_create();

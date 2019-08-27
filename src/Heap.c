@@ -6,6 +6,9 @@
 
 HeapNode *HeapNode_create(uint64_t id, uint64_t distance) {
     HeapNode *heapNode = (HeapNode *) malloc(sizeof(HeapNode));
+    if (heapNode == NULL)
+        return NULL;
+
     heapNode->id = id;
     heapNode->distance = distance;
     heapNode->year = 0;
@@ -15,7 +18,13 @@ HeapNode *HeapNode_create(uint64_t id, uint64_t distance) {
 
 Heap *Heap_create(uint64_t capacity) {
     Heap *heap = (Heap *) malloc(sizeof(Heap));
+    if (heap == NULL)
+        return NULL;
+
     heap->pos = (uint64_t *) malloc(capacity * sizeof(uint64_t));
+    if (heap->pos == NULL)
+        return NULL;
+
     heap->size = 0;
     heap->capacity = capacity;
     heap->array = (HeapNode **) malloc(capacity * sizeof(HeapNode *));
@@ -30,10 +39,7 @@ static inline void swap_HeapNode(HeapNode **a, HeapNode **b) {
 }
 
 static inline bool compareYears(int year1, int year2) {
-    if (year1 < 0 && year2 < 0)
-        return year1 <= year2;
-    else
-        return year1 >= year2;
+    return year1 < year2;
 }
 
 static inline void minHeapify(Heap *heap, uint64_t idx) {
@@ -50,7 +56,7 @@ static inline void minHeapify(Heap *heap, uint64_t idx) {
     if (right < heap->size &&
         ((heap->array[right]->distance < heap->array[smallest]->distance) ||
          ((heap->array[right]->distance == heap->array[left]->distance) &&
-          compareYears(heap->array[right]->year, heap->array[right]->year))))
+          compareYears(heap->array[right]->year, heap->array[left]->year))))
         smallest = right;
 
     if (smallest != idx) {

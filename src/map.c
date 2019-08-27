@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <assert.h>
 #include "map.h"
 #include "HashMap.h"
 #include "Heap.h"
@@ -38,9 +39,43 @@ Map *newMap(void) {
     return map;
 }
 
+void UnusedRoute_free(Route *route) {
+    if (route == NULL)
+        return;
+
+    RouteNode *current = route->routeNodeList->head;
+
+    while (current != NULL) {
+        RouteNode *next = current->next;
+        free(current);
+        current = next;
+    }
+
+    free(route->routeNodeList);
+    free(route);
+}
+
+static inline void AllRoutes_free(Map *map) {
+    for (uint64_t i = 0; i < ROUTES_SIZE; i++) {
+        if (map->routes[i] != NULL) {
+            RouteNode *routeNode = map->routes[i]->routeNodeList->head;
+
+            while (routeNode != NULL) {
+                RouteNode *next = routeNode->next;
+                free(routeNode);
+                routeNode = next;
+            }
+
+            free(map->routes[i]->routeNodeList);
+            free(map->routes[i]);
+        }
+    }
+}
+
 void deleteMap(Map *map) {
     for (uint64_t i = 0; i < map->nCities; i++) {
-        Road *road = map->cities[i]->roadsList->head;
+        Road *road = (Road *) map->cities[i]->roadsList->head;
+
         while (road != NULL) {
             Road *nextRoad = road->nextRoadOfCity;
             free(road);
@@ -48,21 +83,11 @@ void deleteMap(Map *map) {
         }
 
         free(map->cities[i]->roadsList);
+        free(map->cities[i]->cityName);
         free(map->cities[i]);
     }
 
-    for (uint64_t i = 0; i < ROUTES_SIZE; i++) {
-        if (map->routes[i] != NULL) {
-            RouteNode *routeNode = map->routes[i]->routeNodeList->head;
-            while (routeNode != NULL) {
-                RouteNode *next = routeNode->next;
-                free(routeNode);
-                routeNode = next;
-            }
-            free(map->routes[i]->routeNodeList);
-            free(map->routes[i]);
-        }
-    }
+    AllRoutes_free(map);
 
     // Free hash map
     free_hmap(map->nameToCity);
@@ -104,9 +129,12 @@ static inline City *getFromHashMap(Map *map, const char *city) {
 }
 
 static inline bool checkCityName(const char *name) {
+    if (strcmp(name, "") == 0)
+        return false;
+
     uint64_t i = 0;
-    while (name[i] == '\0') {
-        if (name[i] >= 0 && name[i] <= 31)
+    while (name[i] != '\0') {
+        if ((name[i] >= 0 && name[i] <= 31) || name[i] == 59)
             return false;
         i++;
     }
@@ -124,6 +152,9 @@ bool addRoad(Map *map, const char *city1, const char *city2, unsigned length, in
     // If city does not exist, add it on the map
     City *firstCity = getFromHashMap(map, city1);
     City *secondCity = getFromHashMap(map, city2);
+
+    if (firstCity == NULL || secondCity == NULL)
+        return false;
 
     // When road between cities already exist
     if (areConnected(firstCity, secondCity) != NULL)
@@ -154,6 +185,17 @@ bool addRoad(Map *map, const char *city1, const char *city2, unsigned length, in
     return true;
 }
 
+void repairInRoute(Route *route, City *city1, City *city2, int repairYear) {
+    RouteNode *current = route->routeNodeList->head;
+
+    while (current != NULL) {
+        if (current->next != NULL && current->city == city1 && current->next->city == city2)
+            current->age = repairYear;
+
+        current = current->next;
+    }
+}
+
 bool repairRoad(Map *map, const char *city1, const char *city2, int repairYear) {
     if (!checkCityName(city1) || !checkCityName(city2))
         return false;
@@ -163,11 +205,18 @@ bool repairRoad(Map *map, const char *city1, const char *city2, int repairYear) 
     Road *road1 = areConnected(firstCity, secondCity);
     Road *road2 = areConnected(secondCity, firstCity);
 
-    if (!firstCity || !secondCity || road1 == NULL || road2 == NULL || repairYear == 0 || road1->builtYear > repairYear)
+    if (!firstCity || !secondCity || road1 == NULL || road2 == NULL || repairYear == 0 ||
+        road1->builtYear > repairYear || road2->builtYear > repairYear)
         return false;
 
     road1->builtYear = repairYear;
     road2->builtYear = repairYear;
+
+    for (int i = 1; i < ROUTES_SIZE; ++i) {
+        if (map->routes[i] != NULL) {
+            repairInRoute(map->routes[i], firstCity, secondCity, repairYear);
+        }
+    }
 
     return true;
 }
@@ -197,35 +246,68 @@ static inline Route *Route_get(City **parent, City *destination, City *srcCity) 
 }
 
 static inline int compareMin(int year1, int year2) {
-    if (year1 < 0 && year2 < 0)
-        return year1 >= year2 ? year1 : year2;
-    else
-        return year1 <= year2 ? year1 : year2;
+    return year1 < year2 ? year1 : year2;
+}
+
+bool isUnique(Route *optimalPath, uint64_t const *dist, int const *years) {
+    RouteNode *prevInOptimal = optimalPath->routeNodeList->head;
+    RouteNode *nextInOptimal = prevInOptimal->next;
+
+    while (nextInOptimal != NULL) {
+        Road *nextCityNeighbour = nextInOptimal->city->roadsList->head;
+        uint64_t nextCityId = nextInOptimal->city->id;
+
+        while (nextCityNeighbour != NULL) {
+            if (nextCityNeighbour->adjCity != prevInOptimal->city) {
+                uint64_t neighbourId = nextCityNeighbour->adjCity->id;
+                uint64_t length = nextCityNeighbour->length;
+                int year = nextCityNeighbour->builtYear;
+
+                if ((dist[neighbourId] + length == dist[nextCityId]) &&
+                    compareMin(years[neighbourId], year) == years[nextCityId])
+                    return false;
+            }
+
+            nextCityNeighbour = nextCityNeighbour->nextRoadOfCity;
+        }
+
+        prevInOptimal = nextInOptimal;
+        nextInOptimal = nextInOptimal->next;
+    }
+
+    return true;
 }
 
 Route *dijkstra(Map *map, City *src, City *destination) {
-    uint64_t vertices = map->nCities;// Get the number of vertices in graph
-    uint64_t dist[vertices];      // dist values used to pick minimum weight edge in cut
-
-    City *parent[vertices];
+    uint64_t vertices = map->nCities; // Get the number of vertices in graph
+    uint64_t dist[vertices];      // Dist values used to pick minimum weight edge in cut
+    int years[vertices];          // Years array is used to keep the oldest year from source
+    City *parent[vertices];       // Parent array to get the optimalPath by recursion
 
     Heap *heap = Heap_create(vertices);
+    if (heap == NULL)
+        return NULL;
 
     for (uint64_t v = 0; v < vertices; ++v) {
         parent[v] = NULL;
         dist[v] = UINT64_MAX;
+        years[v] = INT32_MAX;
         heap->array[v] = HeapNode_create(v, dist[v]);
+        if (heap->array[v] == NULL)
+            return NULL;
+
         heap->pos[v] = v;
     }
 
     heap->array[src->id]->id = src->id;
     heap->array[src->id]->distance = dist[src->id];
+    heap->array[src->id]->year = years[src->id];
 
     heap->pos[src->id] = src->id;
     dist[src->id] = 0;
     heap->array[src->id]->year = INT32_MAX;
     src->visited = true;
-    decreaseKey(heap, src->id, dist[src->id], 0);
+    decreaseKey(heap, src->id, dist[src->id], years[src->id]);
 
     heap->size = vertices;
 
@@ -239,11 +321,13 @@ Route *dijkstra(Map *map, City *src, City *destination) {
             uint64_t v = pCrawl->adjCity->id;
 
             if (isInHeap(heap, v) && pCrawl->adjCity->visited == false && dist[u] != UINT64_MAX &&
-                pCrawl->length + dist[u] < dist[v]) {
+                (pCrawl->length + dist[u] < dist[v] ||
+                 (pCrawl->length + dist[u] == dist[v] && compareMin(pCrawl->builtYear, years[u]) > years[v]))) {
                 dist[v] = dist[u] + pCrawl->length;
+                years[v] = compareMin(years[u], pCrawl->builtYear);
                 parent[v] = map->cities[u];
 
-                decreaseKey(heap, v, dist[v], compareMin(heapNode->year, pCrawl->builtYear));
+                decreaseKey(heap, v, dist[v], years[v]); // compareMin(heapNode->year, pCrawl->builtYear)
             }
             pCrawl = pCrawl->nextRoadOfCity;
         }
@@ -251,7 +335,16 @@ Route *dijkstra(Map *map, City *src, City *destination) {
     }
 
     free_Heap(heap);
-    return Route_get(parent, destination, src);
+
+    Route *optimalPath = Route_get(parent, destination, src);
+    RouteNode *tail = optimalPath->routeNodeList->tail;
+
+    if (isUnique(optimalPath, dist, years) && tail->city == destination) {
+        return optimalPath;
+    }
+
+    UnusedRoute_free(optimalPath);
+    return NULL;
 }
 
 bool newRoute(Map *map, unsigned routeId, const char *city1, const char *city2) {
@@ -266,6 +359,9 @@ bool newRoute(Map *map, unsigned routeId, const char *city1, const char *city2) 
         return false;
 
     Route *shortestPath = dijkstra(map, srcCity, destCity);
+
+    if (shortestPath == NULL)
+        return false;
 
     RouteNode *lastRouteNode = shortestPath->routeNodeList->tail;
     if (lastRouteNode->city != destCity) {
@@ -288,14 +384,10 @@ static inline bool isInRoute(Route *route, City *city) {
     return false;
 }
 
-static inline int getOldest(int year1, int year2) {
-    if (year1 < 0 && year2 < 0)
-        return year1 >= year2 ? year2 : year1;
-    else
-        return year1 <= year2 ? year2 : year1;
-}
+void get_LengthSum_OldestYear(Route *route, uint64_t *lengthSum, int *year) {
+    if (route == NULL)
+        return;
 
-static inline void get_LengthSum_OldestYear(Route *route, uint64_t *lengthSum, int *year) {
     RouteNode *routeNode = route->routeNodeList->head;
     uint64_t sum = 0;
     int oldestYear = 0;
@@ -304,14 +396,28 @@ static inline void get_LengthSum_OldestYear(Route *route, uint64_t *lengthSum, i
         if (oldestYear == 0) {
             oldestYear = routeNode->age;
         } else {
-            oldestYear = getOldest(oldestYear, routeNode->age);
+            oldestYear = compareMin(oldestYear, routeNode->age);
         }
+
         sum += routeNode->length;
         routeNode = routeNode->next;
     }
 
     *lengthSum = sum;
     *year = oldestYear;
+}
+
+static inline void markVisitedWithout(Route *route, City *city1, City *city2) {
+    RouteNode *routeNode = route->routeNodeList->head;
+    while (routeNode != NULL) {
+        if (routeNode->city != city1 && routeNode->city != city2) {
+            routeNode->city->visited = true;
+            routeNode = routeNode->next;
+        } else {
+            routeNode->city->visited = false;
+            routeNode = routeNode->next;
+        }
+    }
 }
 
 static inline void markVisited(Route *route) {
@@ -330,6 +436,39 @@ static inline void markUnvisited(Route *route) {
     }
 }
 
+void extendFromEnd(Map *map, unsigned routeId, Route *route, Route *routeFromEnd) {
+    RouteNode *nodeBeforeTail = route->routeNodeList->head;
+
+    while (nodeBeforeTail->next != route->routeNodeList->tail) {
+        nodeBeforeTail = nodeBeforeTail->next;
+    }
+
+    free(nodeBeforeTail->next);
+    nodeBeforeTail->next = routeFromEnd->routeNodeList->head;
+    route->routeNodeList->tail = routeFromEnd->routeNodeList->tail;
+
+    free(routeFromEnd->routeNodeList);
+    free(routeFromEnd);
+    map->routes[routeId] = route;
+
+}
+
+void extendFromStart(Map *map, unsigned routeId, Route *route, Route *routeToStart) {
+    RouteNode *nodeBeforeTail = routeToStart->routeNodeList->head;
+
+    while (nodeBeforeTail->next != routeToStart->routeNodeList->tail) {
+        nodeBeforeTail = nodeBeforeTail->next;
+    }
+
+    free(nodeBeforeTail->next);
+    nodeBeforeTail->next = route->routeNodeList->head;
+    route->routeNodeList->head = routeToStart->routeNodeList->head;
+
+    free(routeToStart->routeNodeList);
+    free(routeToStart);
+    map->routes[routeId] = route;
+}
+
 bool extendRoute(Map *map, unsigned routeId, const char *city) {
     if (!checkCityName(city))
         return false;
@@ -342,131 +481,155 @@ bool extendRoute(Map *map, unsigned routeId, const char *city) {
     if (isInRoute(route, extendTo))
         return false;
 
-    // Mark all cities of the route visited
-    markVisited(route);
-
-    RouteNode *lastRouteNode = route->routeNodeList->tail;
-    Route *utilRoute = dijkstra(map, lastRouteNode->city, extendTo);
-
-    // Unmark all cities of the route to be unvisited
-    markUnvisited(route);
-
-    RouteNode *start = route->routeNodeList->head;
-    while (start->next->next != NULL) {
-        start = start->next;
-    }
-
-    free(start->next);
-    start->next = utilRoute->routeNodeList->head;
-    route->routeNodeList->tail = utilRoute->routeNodeList->tail;
-
-    uint64_t minLengthTail;
-    int oldestYearTail;
-    get_LengthSum_OldestYear(route, &minLengthTail, &oldestYearTail);
-
-    // Extend from start
-    markVisited(route);
-
+    RouteNode *routeTail = route->routeNodeList->tail;
     RouteNode *routeHead = route->routeNodeList->head;
-    Route *routeFromStart = dijkstra(map, routeHead->city, extendTo);
-    uint64_t minLengthHead;
-    int oldestYearHead;
-    get_LengthSum_OldestYear(routeFromStart, &minLengthHead, &oldestYearHead);
+    markVisited(route);
+    routeTail->city->visited = false;
+    Route *routeFromEnd = dijkstra(map, routeTail->city, extendTo);
+    routeHead->city->visited = false;
+    routeTail->city->visited = true;
+    Route *routeToStart = dijkstra(map, extendTo, routeHead->city);
+    uint64_t fromEndLength = 0, fromStartLength = -1;
+    int fromEndYear = 0, fromStartYear = -1;
 
-    oldestYearHead = getOldest(oldestYearHead, oldestYearTail);
-    if ((minLengthHead != 0 && minLengthHead < minLengthTail) ||
-        (minLengthHead == minLengthTail && oldestYearHead != oldestYearTail)) {
-        map->routes[routeId] = routeFromStart;
-        markUnvisited(route);
+    if (routeFromEnd == NULL && routeToStart == NULL)
+        return false;
 
-        RouteNode *currentRouteNode = route->routeNodeList->head;
-        while (currentRouteNode != NULL) {
-            RouteNode *next = currentRouteNode->next;
-            free(currentRouteNode);
-            currentRouteNode = next;
-        }
-        free(route->routeNodeList);
-        free(route);
-    } else {
-        RouteNode *currentRouteNode = routeFromStart->routeNodeList->head;
-        while (currentRouteNode != NULL) {
-            RouteNode *next = currentRouteNode->next;
-            free(currentRouteNode);
-            currentRouteNode = next;
-        }
-        free(routeFromStart->routeNodeList);
-        free(routeFromStart);
+    get_LengthSum_OldestYear(routeFromEnd, &fromEndLength, &fromEndYear);
+
+    get_LengthSum_OldestYear(routeToStart, &fromStartLength, &fromStartYear);
+
+    if (fromEndLength == fromStartLength && fromEndYear == fromStartYear)
+        return false;
+
+    if (routeFromEnd != NULL &&
+        (fromEndLength < fromStartLength || (fromEndLength == fromStartLength && fromEndYear < fromStartYear))) {
+        extendFromEnd(map, routeId, route, routeFromEnd);
+        UnusedRoute_free(routeToStart);
+    } else if (routeToStart != NULL &&
+               (fromStartLength < fromEndLength || (fromEndLength == fromStartLength && fromStartYear < fromEndYear))) {
+        extendFromStart(map, routeId, route, routeToStart);
+        UnusedRoute_free(routeFromEnd);
     }
-
-    free(utilRoute->routeNodeList);
-    free(utilRoute);
 
     return true;
 }
 
-static inline void removeRoadInAdjList(City *city1, City *city2) {
+void removeRoadInAdjList(City *city1, City *city2) {
     Road *fakeHead = Road_create(NULL, 0, 0);
     fakeHead->nextRoadOfCity = city1->roadsList->head;
     Road *road = fakeHead;
+
     while (road->nextRoadOfCity != NULL) {
         if (road->nextRoadOfCity->adjCity == city2) {
             Road *next = road->nextRoadOfCity->nextRoadOfCity;
             free(road->nextRoadOfCity);
             road->nextRoadOfCity = next;
+            city1->roadsList->head = fakeHead->nextRoadOfCity;
+
+            if (road->nextRoadOfCity == NULL)
+                city1->roadsList->tail = road;
+
+            free(fakeHead);
             return;
         }
         road = road->nextRoadOfCity;
     }
+
+    free(fakeHead);
 }
 
-static inline bool removeInRoute(Map *map, unsigned routeId, Route *route, City *city1, City *city2) {
-    RouteNode *fakeNode = RouteNode_create(NULL, 0, 0);
-    fakeNode->next = route->routeNodeList->head;
-    RouteNode *routeNode = fakeNode;
-    while (routeNode->next != NULL) {
-        if (routeNode->next->city == city1 && routeNode->next->next->city == city2) {
-            RouteNode *tail = routeNode->next->next;
-            Road *road = areConnected(city1, city2);
-
+bool checkRemoveInRoutes(Map *map, City *city1, City *city2) {
+    for (int i = 1; i < ROUTES_SIZE; ++i) {
+        if (map->routes[i] != NULL) {
+            Road *roadBetween = areConnected(city1, city2);
+            uint64_t length = roadBetween->length;
+            int year = roadBetween->builtYear;
+            markVisitedWithout(map->routes[i], city1, city2);
             removeRoadInAdjList(city1, city2);
-            removeRoadInAdjList(city2, city2);
+            removeRoadInAdjList(city2, city1);
             Route *newRoute = dijkstra(map, city1, city2);
 
-            RouteNode *lastRouteNode = newRoute->routeNodeList->tail;
-            if (lastRouteNode->city == city2) {
-                free(routeNode->next);
-                routeNode->next = newRoute->routeNodeList->head;
-                RouteNode *lastNodeNewRoute = newRoute->routeNodeList->tail;
-                lastNodeNewRoute->next = tail->next;
-                free(tail);
-                route->routeNodeList->head = fakeNode->next;
-                route->routeNodeList->tail = newRoute->routeNodeList->tail;
-                map->routes[routeId] = route;
-                free(fakeNode);
-
-                return true;
-            } else {
-                // Free allocated memory.
-                RouteNode *current = newRoute->routeNodeList->head;
-                while (current != NULL) {
-                    RouteNode *next = current->next;
-                    free(current);
-                    current = next;
-                }
-                free(newRoute->routeNodeList);
-                free(newRoute);
-                free(fakeNode);
-
-                // Add roads between cities
-                addRoad(map, city1->cityName, city2->cityName, road->length, road->builtYear);
+            if (newRoute == NULL) {
+                addRoad(map, city1->cityName, city2->cityName, length, year);
+                markUnvisited(map->routes[i]);
                 return false;
             }
+
+            addRoad(map, city1->cityName, city2->cityName, length, year);
+            markUnvisited(map->routes[i]);
+            UnusedRoute_free(newRoute);
         }
-        routeNode = routeNode->next;
     }
 
-    free(fakeNode);
     return true;
+}
+
+Route *dijkstraWithDirection(Map *map, Route *route, City *city1, City *city2, bool *oppDir) {
+    RouteNode *current = route->routeNodeList->head;
+
+    while (current != NULL && current->next != NULL) {
+        if (current->city == city1 && current->next->city == city2)
+            return dijkstra(map, city1, city2);
+        else if (current->city == city2 && current->next->city == city1) {
+            *oppDir = true;
+            return dijkstra(map, city2, city1);
+        }
+
+        current = current->next;
+    }
+
+    return NULL;
+}
+
+void removeInRoute(Map *map, unsigned routeId, Route *route, City *city1, City *city2) {
+    markVisitedWithout(route, city1, city2);
+    bool oppDir = false;
+    Route *newRoute = dijkstraWithDirection(map, route, city1, city2, &oppDir);
+
+    if (oppDir == true) {
+        City *temp = city1;
+        city1 = city2;
+        city2 = temp;
+    }
+
+    RouteNode *fakeNode = RouteNode_create(NULL, 0, 0);
+    fakeNode->next = route->routeNodeList->head;
+    RouteNode *current = fakeNode;
+
+    while (current->next->next != NULL) {
+        if (current->next->city == city1 && current->next->next->city == city2) {
+            RouteNode *next = current->next->next;
+            int builtYear = current->age;
+            uint64_t length = current->length;
+            free(current->next);
+            current->next = newRoute->routeNodeList->head;
+            current->age = builtYear;
+            current->length = length;
+            RouteNode *newRouteTail = newRoute->routeNodeList->tail;
+            newRouteTail->next = next->next;
+            newRouteTail->length = next->length;
+            newRouteTail->age = next->age;
+            free(next);
+            route->routeNodeList->head = fakeNode->next;
+
+            if (newRouteTail->next == NULL)
+                route->routeNodeList->tail = newRouteTail;
+
+            free(newRoute->routeNodeList);
+            free(newRoute);
+            free(fakeNode);
+            map->routes[routeId] = route;
+            markUnvisited(route);
+            return;
+        }
+
+        current = current->next;
+    }
+
+    free(newRoute->routeNodeList);
+    free(newRoute);
+    free(fakeNode);
 }
 
 bool removeRoad(Map *map, const char *city1, const char *city2) {
@@ -476,19 +639,22 @@ bool removeRoad(Map *map, const char *city1, const char *city2) {
     City *firstCity = search_hmap(map->nameToCity, (void *) city1);
     City *secondCity = search_hmap(map->nameToCity, (void *) city2);
     Road *road1 = areConnected(firstCity, secondCity);
+    Road *road2 = areConnected(secondCity, firstCity);
 
-    if (!firstCity || !secondCity || !road1 || strcmp(city1, city2) == 0)
+    if (!firstCity || !secondCity || !road1 || !road2 || strcmp(city1, city2) == 0)
         return false;
 
-    for (int i = 1; i < ROUTES_SIZE; ++i) {
-        if (map->routes[i] != NULL) {
-            if (!removeInRoute(map, i, map->routes[i], firstCity, secondCity))
-                return false;
-        }
-    }
+    if (!checkRemoveInRoutes(map, firstCity, secondCity))
+        return false;
 
     removeRoadInAdjList(firstCity, secondCity);
     removeRoadInAdjList(secondCity, firstCity);
+
+    for (int i = 1; i < ROUTES_SIZE; ++i) {
+        if (map->routes[i] != NULL) {
+            removeInRoute(map, i, map->routes[i], firstCity, secondCity);
+        }
+    }
 
     return true;
 }
@@ -498,22 +664,38 @@ char const *getRouteDescription(Map *map, unsigned routeId) {
 
     if (route == NULL) {
         char *c = malloc(1);
+
+        if (c == NULL)
+            return NULL;
+
         c[0] = '\0';
         return c;
     }
 
     RouteNode *routeNode = route->routeNodeList->head;
-    char *b = (char *) malloc(BUFF_SIZE * sizeof(char));
+    size_t totalSize = BUFF_SIZE;
+    char *b = (char *) malloc(totalSize * sizeof(char));
 
     if (b == NULL)
         return NULL;
 
+    if (routeNode == NULL) {
+        free(b);
+        return NULL;
+    }
+
     sprintf(b, "%u", routeId);
-    int b_size = strlen(b);
+    size_t b_size = strlen(b);
 
     while (routeNode->next != NULL) {
         sprintf(b_size + b, ";%s;%u;%d", routeNode->city->cityName, routeNode->length, routeNode->age);
         b_size = strlen(b);
+
+        if (b_size > (totalSize * 0.75)) {
+            totalSize = 2 * totalSize;
+            b = (char *) realloc(b, totalSize * sizeof(char));
+        }
+
         routeNode = routeNode->next;
     }
 

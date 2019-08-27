@@ -47,7 +47,7 @@ struct Road {
 };
 
 struct City {
-    const char *cityName;
+    char *cityName;
     uint64_t id;
     bool visited;
     List *roadsList;

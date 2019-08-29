@@ -4,14 +4,14 @@
 #include <stdbool.h>
 #include "Heap.h"
 
-HeapNode *HeapNode_create(uint64_t id, uint64_t distance) {
+HeapNode *HeapNode_create(uint64_t id, uint64_t distance, int year) {
     HeapNode *heapNode = (HeapNode *) malloc(sizeof(HeapNode));
     if (heapNode == NULL)
         return NULL;
 
     heapNode->id = id;
     heapNode->distance = distance;
-    heapNode->year = 0;
+    heapNode->year = year;
 
     return heapNode;
 }

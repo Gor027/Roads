@@ -292,7 +292,7 @@ Route *dijkstra(Map *map, City *src, City *destination) {
         parent[v] = NULL;
         dist[v] = UINT64_MAX;
         years[v] = INT32_MAX;
-        heap->array[v] = HeapNode_create(v, dist[v]);
+        heap->array[v] = HeapNode_create(v, dist[v], years[v]);
         if (heap->array[v] == NULL)
             return NULL;
 

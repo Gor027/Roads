@@ -58,7 +58,6 @@ void *search_hmap(hmap *hm, char *key) {
         item = item->next;
     }
 
-
     return NULL;
 }
 
@@ -109,35 +108,6 @@ void set_hmap(hmap *hm, void *key, void *value) {
     if (++hm->count >= hm->size * 3 / 4)
         rehash(hm);
 }
-
-/* This function may be useful for future development */
-//void delete_hmap(hmap *hm, void *key) {
-//    uint64_t index = hash(key, hm->size);
-//    hm_item *item = hm->buckets[index];
-//
-//    if (item == NULL)
-//        return;
-//
-//    if (item->next == NULL) {
-//        free(item);
-//        hm->buckets[index] = NULL;
-//        hm->count--;
-//        return;
-//    }
-//
-//    while (item != NULL) {
-//        hm_item *next = item->next;
-//
-//        if (next != NULL && next->key == key) {
-//            item->next = next->next;
-//            hm->count--;
-//            free(next);
-//            return;
-//        }
-//
-//        item = next;
-//    }
-//}
 
 void free_hmap(hmap *hm) {
     for (uint64_t i = 0; i < hm->size; i++) {

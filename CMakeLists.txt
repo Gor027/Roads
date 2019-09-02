@@ -29,7 +29,7 @@ set(SOURCE_FILES
         src/Heap.c
         src/map.c
         src/HashMap.h
-        src/map_main.c)
+        src/map_main.c src/Commands.h src/Commands.c)
 
 
 # Wskazujemy plik wykonywalny.

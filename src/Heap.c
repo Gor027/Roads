@@ -42,21 +42,21 @@ static inline bool compareYears(int year1, int year2) {
     return year1 < year2;
 }
 
-static inline void minHeapify(Heap *heap, uint64_t idx) {
+static void minHeapify(Heap *heap, uint64_t idx) {
     uint64_t smallest = idx;
     uint64_t left = 2 * idx + 1;
     uint64_t right = 2 * idx + 2;
 
     if (left < heap->size &&
         ((heap->array[left]->distance < heap->array[smallest]->distance) ||
-         ((heap->array[left]->distance == heap->array[right]->distance) &&
-          compareYears(heap->array[left]->year, heap->array[right]->year))))
+         ((heap->array[left]->distance == heap->array[smallest]->distance) &&
+          compareYears(heap->array[left]->year, heap->array[smallest]->year))))
         smallest = left;
 
     if (right < heap->size &&
         ((heap->array[right]->distance < heap->array[smallest]->distance) ||
-         ((heap->array[right]->distance == heap->array[left]->distance) &&
-          compareYears(heap->array[right]->year, heap->array[left]->year))))
+         ((heap->array[right]->distance == heap->array[smallest]->distance) &&
+          compareYears(heap->array[right]->year, heap->array[smallest]->year))))
         smallest = right;
 
     if (smallest != idx) {
@@ -76,7 +76,7 @@ static inline void minHeapify(Heap *heap, uint64_t idx) {
 }
 
 bool isEmpty(Heap *heap) {
-    return heap->size == 0;
+    return heap->size <= 0;
 }
 
 HeapNode *extract_Min(Heap *heap) {
@@ -95,8 +95,8 @@ HeapNode *extract_Min(Heap *heap) {
     heap->pos[lastNode->id] = 0;
 
     // Reduce heap size and heapify root
-    --heap->size;
     minHeapify(heap, 0);
+    --heap->size;
 
     return root;
 }

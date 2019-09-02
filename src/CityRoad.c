@@ -21,6 +21,10 @@ Road *Road_create(City *adjCity, unsigned length, int builtYear) {
         return NULL;
 
     road->adjCity = adjCity;
+
+    if (adjCity != NULL)
+        adjCity->visited = false;
+
     road->length = length;
     road->builtYear = builtYear;
     road->nextRoadOfCity = NULL;
@@ -34,7 +38,7 @@ City *City_create(const char *cityName, uint64_t id) {
     if (city == NULL)
         return NULL; /* In case when allocation failed */
 
-    char *str_new = (char *) malloc(sizeof(char) * (strlen(cityName)+1));
+    char *str_new = (char *) malloc(sizeof(char) * (strlen(cityName) + 1));
 
     if (str_new == NULL)
         return NULL;
@@ -66,6 +70,10 @@ RouteNode *RouteNode_create(City *city, unsigned length, int age) {
         return NULL;
 
     routeNode->city = city;
+
+    if (city != NULL)
+        routeNode->city->visited = false;
+
     routeNode->length = length;
     routeNode->age = age;
     routeNode->next = NULL;

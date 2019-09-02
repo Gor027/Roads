@@ -13,10 +13,18 @@
 #include "CityRoad.h"
 #include "HashMap.h"
 
+#define ROUTES_SIZE 1000
+
 /**
  * Struktura przechowująca mapę dróg krajowych.
  */
-typedef struct Map Map;
+typedef struct Map {
+    uint64_t nCities;
+    uint64_t citiesSize;
+    City **cities;
+    Route *routes[ROUTES_SIZE];
+    hmap *nameToCity;
+} Map;
 
 /** @brief Tworzy nową strukturę.
  * Tworzy nową, pustą strukturę niezawierającą żadnych miast, odcinków dróg ani
@@ -121,6 +129,17 @@ bool extendRoute(Map *map, unsigned routeId, const char *city);
  * pamięci.
  */
 bool removeRoad(Map *map, const char *city1, const char *city2);
+
+/** @brief Usuwa z mapy dróg drogę krajową o podanym numerze.
+ * Jeśli taka istnieje, a w przeciwnym przypadku,
+ * tzn. gdy podana droga krajowa nie istnieje lub podany numer jest niepoprawny,
+ * niczego nie zmienia w mapie dróg. Nie usuwa odcinków dróg ani miast.
+ * @param[in,out] map     - wskaźnik na strukturę przechowującą mapę dróg;
+ * @param[in] routeId     - numer drogi krajowej.
+ * @return Wartość @p true, jeśli droga krajowa został usunięty.
+ * Wartość @p false, jeśli podana droga krajowa nie istnieje lub podany numer jest niepoprawny.
+ */
+bool removeRoute(Map *map, unsigned routeId);
 
 /** @brief Udostępnia informacje o drodze krajowej.
  * Zwraca wskaźnik na napis, który zawiera informacje o drodze krajowej. Alokuje
